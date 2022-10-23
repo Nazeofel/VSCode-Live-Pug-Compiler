@@ -3,51 +3,40 @@ import * as fs from "fs";
 import * as path from "path";
 import * as pug from "pug";
 
+let compilerStatus: boolean = false; //status of the compiler used to switch between the states
+const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath; //filesystem path of the current workspace
+let targetFolder: string = vscode.workspace
+  .getConfiguration()
+  .get("livePugCompiler.savePath"); //get savePath from settings.json file or defaults to /Compiled-HTML
+let fileExtenstion: string = vscode.workspace
+  .getConfiguration()
+  .get("livePugCompiler.fileExtension");
+let fsEvent: vscode.Disposable; //file system event for the compiler to auto compile on save
 
+vscode.workspace.onDidChangeConfiguration((e) => {
+  /**
+   * if the configuration is modified and also it affects the extension then modify the old configuration with the new configuration
+   * else do nothing;
+   */
 
-// status of the compiler used to switch between the states
-let compilerStatus: boolean     = false;
+  if (
+    targetFolder !== "null" &&
+    e.affectsConfiguration("livePugCompiler.savePath")
+  ) {
+    targetFolder = vscode.workspace
+      .getConfiguration()
+      .get("livePugCompiler.savePath");
+  }
 
-// filesystem path of the current workspace
-const workspaceRoot             = vscode.workspace.workspaceFolders[0].uri.fsPath;
-
-// get savePath from settings.json file or defaults to /Compiled-HTML
-let targetFolder: string        = vscode.workspace.getConfiguration().get("livePugCompiler.savePath");
-
-// get extension name from settings.json file or defaults to /Compiled-HTML
-let targetExtension: string     = vscode.workspace.getConfiguration().get("livePugCompiler.saveExt");
-
-// get compilation setting for helper files from settings.json file or defaults to /Compiled-HTML
-let targetUScore: boolean       = vscode.workspace.getConfiguration().get("livePugCompiler.uScoreCompile");
-
-// get root path to compile from settings.json file or defaults to /Compiled-HTML
-let targetStartFolder: string   = vscode.workspace.getConfiguration().get("livePugCompiler.startFolder");
-
-//file system event for the compiler to auto compile on save
-let fsEvent: vscode.Disposable;
-
-
-vscode.workspace.onDidChangeConfiguration(((e) => {
-    /**
-     * if the configuration is modified and also it affects the extension then modify the old configuration with the new configuration
-     * else do nothing;
-     */
-    if (targetFolder !== "null" && e.affectsConfiguration("livePugCompiler.savePath")) {
-        targetFolder = vscode.workspace.getConfiguration().get("livePugCompiler.savePath");
-    }
-
-    if (targetExtension !== "null" && e.affectsConfiguration("livePugCompiler.saveExt")) {
-        targetExtension = vscode.workspace.getConfiguration().get("livePugCompiler.saveExt");
-    }
-
-    if ( e.affectsConfiguration("livePugCompiler.uScoreCompile")) {
-        targetUScore = vscode.workspace.getConfiguration().get("livePugCompiler.uScoreCompile");
-    }
-
-    if (targetStartFolder !== "null" && e.affectsConfiguration("livePugCompiler.startFolder")) {
-        targetStartFolder = vscode.workspace.getConfiguration().get("livePugCompiler.startFolder");
-    }
-}));
+  if (
+    fileExtenstion !== "null" &&
+    e.affectsConfiguration("livePugCompiler.fileExtension")
+  ) {
+    fileExtenstion = vscode.workspace
+      .getConfiguration()
+      .get("livePugCompiler.fileExtension");
+  }
+});
 
 /**
  * 1.compile once
@@ -57,103 +46,52 @@ vscode.workspace.onDidChangeConfiguration(((e) => {
  * 3.set the compilerStatus to true
  */
 export const startCompiler = () => {
+  vscode.window.showInformationMessage("Pug Compiler Started");
 
-    vscode.window.showInformationMessage("Pug Compiler Started");
-
-    compileOnce();
-    fsEvent = vscode.workspace.onDidSaveTextDocument((txDoc) => {
-        if (txDoc.languageId === "jade") {
-            compileToHTML(txDoc.uri);
-        }
-    });
-    compilerStatus = true;
-
+  compileOnce();
+  fsEvent = vscode.workspace.onDidSaveTextDocument((txDoc) => {
+    if (txDoc.languageId === "jade") {
+      compileToHTML(txDoc.uri);
+    }
+  });
+  compilerStatus = true;
 };
 
 // dispose the listener and set compiler state to flase
 export const stopCompiler = () => {
+  vscode.window.showInformationMessage("Pug Compiler Stopped");
 
-    vscode.window.showInformationMessage("Pug Compiler Stopped");
-
-    fsEvent.dispose();
-    compilerStatus = false;
-
+  fsEvent.dispose();
+  compilerStatus = false;
 };
 
 // do the compilation only once
 export const compileOnce = () => {
-
-    // get all .pug files from the workspace
-    vscode.workspace.findFiles("**/*.pug").then((files) => {
-        files.forEach((file) => {
-            compileToHTML(file);
-        });
+  // get all .pug files from the workspace
+  vscode.workspace.findFiles("**/*.pug").then((files) => {
+    files.forEach((file) => {
+      compileToHTML(file);
     });
-
+  });
 };
 
 // returns the state of the compiler
 export const isCompilerActive = () => {
-    return compilerStatus;
+  return compilerStatus;
 };
 
 // compile and write to respective dirs
 const compileToHTML = (file: vscode.Uri) => {
-    targetExtension             = typeof targetExtension === 'string'? targetExtension: 'null';
-    targetExtension             = targetExtension.length > 0? targetExtension: 'null';
-    targetExtension             = targetExtension === 'null'? 'html': targetExtension;
+  const filename = path.basename(file.fsPath, ".pug"); //filename without extension eg: index.pug -> index
+  const relativeDir = path.dirname(
+    vscode.workspace.asRelativePath(file.fsPath)
+  ); //folder name relative to workspace eg: ${workspace}/app/index.pug -> app
+  console.log(relativeDir);
+  const fileDestination = path.join(workspaceRoot, targetFolder, relativeDir); //creating destination eg: ${workspace} + /Compiled-HTML + folder name
+  const COMPILED_DATA = pug.renderFile(file.fsPath); // Compile pug to  HTML format
 
-    const filename              = path.basename( file.fsPath, ".pug" );
-    let relativeDir             = path.dirname( vscode.workspace.asRelativePath( file.fsPath ));
-    const COMPILED_DATA         = pug.renderFile( file.fsPath );
-
-
-    if ( targetStartFolder.length > 0 ) {
-        let original    = relativeDir.split('/');
-        let start       = targetStartFolder.split('/');
-        let exit        = new Array();
-
-        if ( original.length > 0 ){
-            var a       = true;
-            var temp    = new Array();
-
-            temp = new Array();
-            for ( var key in original ) {
-                if ( original[key].length > 0 )
-                    { temp.push(original[key]); }
-            }
-            original = temp;
-
-            temp = new Array();
-            for ( var key in start ) {
-                if ( start[key].length > 0 )
-                    { temp.push(start[key]); }
-            }
-            start = temp;
-
-            for ( var key in original ) {
-                if ( a === false || typeof start[key] === 'undefined' || original[key] !== start[key] ) {
-                    exit.push(original[key]);
-                    a = false;
-                }
-            }
-
-            relativeDir = exit.join('/');
-        }
-    }
-
-    const fileDestination   = path.join( workspaceRoot, targetFolder, relativeDir );
-
-    // Проверить файлы с нижним подчеркиванием
-    if ( targetUScore || ( !targetUScore && filename.substr( 0, 1 ) != "_" )) {
-
-        if ( fs.existsSync(fileDestination) === false ) {
-            vscode.workspace.fs.createDirectory( vscode.Uri.file( fileDestination )).then(() => {
-                fs.writeFileSync( path.join( fileDestination, `${filename}.${targetExtension}`), COMPILED_DATA );
-            });
-        }
-        else {
-            fs.writeFileSync( path.join( fileDestination, `${filename}.${targetExtension}` ), COMPILED_DATA );
-        }
-    }
+  fs.writeFileSync(
+    path.join(fileDestination, `${filename}.${fileExtenstion}`),
+    COMPILED_DATA
+  );
 };

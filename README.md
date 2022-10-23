@@ -1,11 +1,17 @@
-# VSCode Live Pug Compiler
-**Compile pug Files to Html at real time with this extension**
-Customize the compiled files save location by modifying the settings.json file as
+# Custom Pug Compiler Just For You
 
-    {
-	    "livePugCompiler.savePath": "/location to save compiled files",
-	    "livePugCompiler.saveExt": "Extension name: html, php or other",
-	    "livePugCompiler.uScoreCompile": "TRUE or FALSE for enable/disable compiling helpers files ( where has underscore symbol on filename begin )",
-	    "livePugCompiler.startFolder": "/location to set root folder for pugs files"
-	}
-	    
+**Basic config lines :**
+
+```
+{
+    "livePugCompiler.savePath": "path"
+    "livePugCompiler.fileExtension": "extension"
+}
+
+```
+
+### Maybe I'll add more of them.
+
+# -- Credit --
+
+Original Author : https://github.com/Jaheen/VSCode-Live-Pug-Compiler;
